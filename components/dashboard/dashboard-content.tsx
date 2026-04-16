@@ -16,7 +16,11 @@ export function DashboardContent() {
   }, []);
 
   useEffect(() => {
-    loadStats();
+    const timer = setTimeout(() => {
+      void loadStats();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [loadStats]);
 
   return (

@@ -6,7 +6,6 @@ export interface INguoiThan {
 }
 
 export interface IMilitia {
-  stt?: number;
   hoTen: string;
   cccd: string;
   sdt?: string;
@@ -36,7 +35,6 @@ const NguoiThanSchema = new Schema<INguoiThan>(
 
 const MilitiaSchema = new Schema<IMilitiaDocument>(
   {
-    stt: { type: Number },
     hoTen: { type: String, required: [true, "Họ tên là bắt buộc"] },
     cccd: {
       type: String,

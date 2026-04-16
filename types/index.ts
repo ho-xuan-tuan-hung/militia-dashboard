@@ -1,6 +1,5 @@
 export interface MilitiaFormData {
   _id?: string;
-  stt?: number;
   hoTen: string;
   cccd: string;
   sdt?: string;

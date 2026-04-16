@@ -56,24 +56,28 @@ export function MilitiaFormDialog({
   const isEdit = !!editData?._id;
 
   useEffect(() => {
-    if (editData) {
-      setForm({
-        ...emptyForm,
-        ...editData,
-        thongTinNguoiThan: {
-          cha: {
-            ten: editData.thongTinNguoiThan?.cha?.ten ?? "",
-            sdt: editData.thongTinNguoiThan?.cha?.sdt ?? "",
+    const timer = setTimeout(() => {
+      if (editData) {
+        setForm({
+          ...emptyForm,
+          ...editData,
+          thongTinNguoiThan: {
+            cha: {
+              ten: editData.thongTinNguoiThan?.cha?.ten ?? "",
+              sdt: editData.thongTinNguoiThan?.cha?.sdt ?? "",
+            },
+            me: {
+              ten: editData.thongTinNguoiThan?.me?.ten ?? "",
+              sdt: editData.thongTinNguoiThan?.me?.sdt ?? "",
+            },
           },
-          me: {
-            ten: editData.thongTinNguoiThan?.me?.ten ?? "",
-            sdt: editData.thongTinNguoiThan?.me?.sdt ?? "",
-          },
-        },
-      });
-    } else {
-      setForm(emptyForm);
-    }
+        });
+      } else {
+        setForm(emptyForm);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [editData, open]);
 
   function updateField(field: string, value: string | number | null | undefined) {
@@ -126,33 +130,17 @@ export function MilitiaFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Row 1: STT + Họ tên */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="stt">STT</Label>
-              <Input
-                id="stt"
-                type="number"
-                value={form.stt ?? ""}
-                onChange={(e) =>
-                  updateField(
-                    "stt",
-                    e.target.value ? Number(e.target.value) : undefined
-                  )
-                }
-              />
-            </div>
-            <div className="col-span-3 space-y-2">
-              <Label htmlFor="hoTen">
-                Họ tên <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="hoTen"
-                required
-                value={form.hoTen}
-                onChange={(e) => updateField("hoTen", e.target.value)}
-              />
-            </div>
+          {/* Row 1: Họ tên */}
+          <div className="space-y-2">
+            <Label htmlFor="hoTen">
+              Họ tên <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="hoTen"
+              required
+              value={form.hoTen}
+              onChange={(e) => updateField("hoTen", e.target.value)}
+            />
           </div>
 
           {/* Row 2: CCCD + SĐT */}

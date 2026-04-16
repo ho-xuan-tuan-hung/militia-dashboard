@@ -44,7 +44,12 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getMilitiaList, deleteMilitia, getAllMilitiaForExport } from "@/actions/militia";
+import {
+  getMilitiaList,
+  deleteMilitia,
+  getAllMilitiaForExport,
+  getAvailableYears,
+} from "@/actions/militia";
 import { MilitiaFormDialog } from "./militia-form-dialog";
 import { ImportDialog } from "./import-dialog";
 import { exportToExcel } from "@/lib/excel";
@@ -58,6 +63,8 @@ export function MilitiaTable() {
   const [search, setSearch] = useState("");
   const [chucVuFilter, setChucVuFilter] = useState("");
   const [tieuDoiFilter, setTieuDoiFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [loading, startTransition] = useTransition();
   const [initialLoad, setInitialLoad] = useState(true);
 
@@ -73,6 +80,7 @@ export function MilitiaTable() {
         search,
         chucVu: chucVuFilter,
         tieuDoi: tieuDoiFilter,
+        namVaoLucLuong: yearFilter,
         page,
         pageSize,
       });
@@ -80,11 +88,17 @@ export function MilitiaTable() {
       setTotal(result.total);
       setInitialLoad(false);
     });
-  }, [search, chucVuFilter, tieuDoiFilter, page, pageSize]);
+  }, [search, chucVuFilter, tieuDoiFilter, yearFilter, page, pageSize]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    getAvailableYears()
+      .then((years) => setAvailableYears(years))
+      .catch(() => setAvailableYears([]));
+  }, []);
 
   // Debounced search
   const [searchInput, setSearchInput] = useState("");
@@ -141,11 +155,13 @@ export function MilitiaTable() {
 
   const columns: ColumnDef<MilitiaFormData>[] = [
     {
-      accessorKey: "stt",
+      id: "stt",
       header: "STT",
       size: 60,
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.stt ?? "-"}</span>
+        <span className="text-muted-foreground">
+          {(page - 1) * pageSize + row.index + 1}
+        </span>
       ),
     },
     {
@@ -286,9 +302,29 @@ export function MilitiaTable() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả TĐ</SelectItem>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              {[1, 2, 3].map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   Tiểu đội {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={yearFilter}
+            onValueChange={(v) => {
+              setYearFilter(v === "all" ? "" : (v ?? ""));
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Năm vào lực lượng" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả năm</SelectItem>
+              {availableYears.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -369,7 +405,7 @@ export function MilitiaTable() {
                   colSpan={columns.length}
                   className="h-24 text-center text-muted-foreground"
                 >
-                  {search || chucVuFilter || tieuDoiFilter
+                  {search || chucVuFilter || tieuDoiFilter || yearFilter
                     ? "Không tìm thấy kết quả phù hợp"
                     : "Chưa có dữ liệu. Nhấn \"Thêm mới\" để bắt đầu."}
                 </TableCell>

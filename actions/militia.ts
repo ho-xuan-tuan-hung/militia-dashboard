@@ -19,6 +19,7 @@ export async function getMilitiaList(params?: {
   search?: string;
   chucVu?: string;
   tieuDoi?: string;
+  namVaoLucLuong?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{
@@ -33,6 +34,7 @@ export async function getMilitiaList(params?: {
     search = "",
     chucVu = "",
     tieuDoi = "",
+    namVaoLucLuong = "",
     page = 1,
     pageSize = 20,
   } = params ?? {};
@@ -55,14 +57,25 @@ export async function getMilitiaList(params?: {
     filter.tieuDoi = Number(tieuDoi);
   }
 
+  if (namVaoLucLuong) {
+    filter.namVaoLucLuong = Number(namVaoLucLuong);
+  }
+
   const skip = (page - 1) * pageSize;
 
   const [data, total] = await Promise.all([
-    Militia.find(filter)
-      .sort({ stt: 1, createdAt: -1 })
-      .skip(skip)
-      .limit(pageSize)
-      .lean(),
+    Militia.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          _chucVuOrder: { $cond: [{ $eq: ["$chucVu", "Tiểu đội trưởng"] }, 0, 1] },
+        },
+      },
+      { $sort: { tieuDoi: 1, _chucVuOrder: 1, hoTen: 1 } },
+      { $skip: skip },
+      { $limit: pageSize },
+      { $project: { _chucVuOrder: 0 } },
+    ]),
     Militia.countDocuments(filter),
   ]);
 
@@ -178,9 +191,26 @@ export async function bulkUpsertMilitia(
   try {
     await connectDB();
 
-    const operations = records.map((record) => {
+    // Deduplicate by CCCD (within the same import file)
+    const seen = new Set<string>();
+    const dedupedRecords: MilitiaFormData[] = [];
+    for (const r of records) {
+      if (!r.cccd) continue;
+      if (seen.has(r.cccd)) continue;
+      seen.add(r.cccd);
+      dedupedRecords.push(r);
+    }
+
+    if (dedupedRecords.length === 0) {
+      return { success: true, message: "Không có dữ liệu để import" };
+    }
+
+    const operations = dedupedRecords.map((record) => {
       // Strip client-only fields before upsert
-      const { _id, createdAt, updatedAt, ...data } = record;
+      const data = { ...record } as unknown as Record<string, unknown>;
+      delete (data as { _id?: unknown })._id;
+      delete (data as { createdAt?: unknown }).createdAt;
+      delete (data as { updatedAt?: unknown }).updatedAt;
       return {
         updateOne: {
           filter: { cccd: record.cccd },
@@ -204,6 +234,18 @@ export async function bulkUpsertMilitia(
       error instanceof Error ? error.message : "Lỗi khi import dữ liệu";
     return { success: false, message: msg };
   }
+}
+
+// ─── FILTER HELPERS ───────────────────────────────────────────────
+export async function getAvailableYears(): Promise<number[]> {
+  await connectDB();
+
+  const years = await Militia.distinct("namVaoLucLuong");
+  const numericYears = years
+    .filter((y) => typeof y === "number" && Number.isFinite(y))
+    .sort((a, b) => a - b) as number[];
+
+  return numericYears;
 }
 
 // ─── DASHBOARD STATS ──────────────────────────────────────────────
@@ -250,6 +292,14 @@ export async function getTrinhDoStats(): Promise<TrinhDoStats[]> {
 // ─── EXPORT: Get all militia (no pagination) ──────────────────────
 export async function getAllMilitiaForExport(): Promise<MilitiaFormData[]> {
   await connectDB();
-  const data = await Militia.find().sort({ stt: 1, createdAt: -1 }).lean();
+  const data = await Militia.aggregate([
+    {
+      $addFields: {
+        _chucVuOrder: { $cond: [{ $eq: ["$chucVu", "Tiểu đội trưởng"] }, 0, 1] },
+      },
+    },
+    { $sort: { tieuDoi: 1, _chucVuOrder: 1, hoTen: 1 } },
+    { $project: { _chucVuOrder: 0 } },
+  ]);
   return serialize(data) as unknown as MilitiaFormData[];
 }

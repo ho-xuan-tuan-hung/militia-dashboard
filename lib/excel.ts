@@ -3,8 +3,6 @@ import type { MilitiaFormData } from "@/types";
 
 // ─── Column mapping: Vietnamese headers → field keys ──────────────
 const HEADER_MAP: Record<string, keyof MilitiaFormData | string> = {
-  STT: "stt",
-  stt: "stt",
   "Họ tên": "hoTen",
   "Họ và tên": "hoTen",
   "Ho ten": "hoTen",
@@ -45,14 +43,39 @@ const HEADER_MAP: Record<string, keyof MilitiaFormData | string> = {
   "SDT mẹ": "me_sdt",
   "Ghi chú": "ghiChu",
   ghiChu: "ghiChu",
+  note: "ghiChu",
   "Ngày sinh": "__ngaySinh",
   "Năm sinh": "__namSinh",
 };
 
+function normalizeHeader(input: string): string {
+  return input
+    .normalize("NFC")
+    .replace(/\uFEFF/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+const HEADER_MAP_NORMALIZED: Record<string, keyof MilitiaFormData | string> =
+  Object.fromEntries(
+    Object.entries(HEADER_MAP).map(([k, v]) => [normalizeHeader(k), v])
+  );
+
+function isTenToken(token: string) {
+  const t = normalizeHeader(token);
+  return t === "tên" || t === "ten" || t.includes("ten");
+}
+
+function isSdtToken(token: string) {
+  const t = normalizeHeader(token);
+  return t === "sđt" || t === "sdt" || t.includes("sđt") || t.includes("sdt");
+}
+
 // ─── EXPORT: MilitiaFormData[] → Excel download ───────────────────
 export function exportToExcel(data: MilitiaFormData[], filename?: string) {
   const rows = data.map((item, index) => ({
-    STT: item.stt ?? index + 1,
+    STT: index + 1,
     "Họ tên": item.hoTen,
     CCCD: item.cccd,
     SĐT: item.sdt ?? "",
@@ -123,36 +146,113 @@ function findHeaderRow(ws: XLSX.WorkSheet): number {
 export async function parseExcelFile(
   file: File
 ): Promise<{ data: MilitiaFormData[]; errors: string[] }> {
+  const isCSV = file.name.toLowerCase().endsWith(".csv");
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
       try {
-        const arrayBuffer = e.target?.result;
-        if (!arrayBuffer) {
+        const result = e.target?.result;
+        if (!result) {
           reject(new Error("Không đọc được file"));
           return;
         }
 
-        const wb = XLSX.read(arrayBuffer, { type: "array" });
+        const wb = isCSV
+          ? XLSX.read(result as string, { type: "string", raw: true })
+          : XLSX.read(result, { type: "array", raw: true });
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
 
         // Auto-detect header row
         const headerRowIndex = findHeaderRow(ws);
+        const secondaryHeaderRowIndex = headerRowIndex + 1;
         const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
-        const headerCols: string[] = [];
+        const headerColsPrimary: string[] = [];
+        const headerColsSecondary: string[] = [];
 
         for (let c = range.s.c; c <= range.e.c; c++) {
-          const cell = ws[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
-          headerCols.push(cell ? String(cell.v).trim() : `__col${c}`);
+          const cellPrimary = ws[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
+          const cellSecondary =
+            ws[XLSX.utils.encode_cell({ r: secondaryHeaderRowIndex, c })];
+
+          headerColsPrimary.push(
+            cellPrimary ? String(cellPrimary.v).trim() : `__col${c}`
+          );
+          headerColsSecondary.push(
+            cellSecondary ? String(cellSecondary.v).trim() : ""
+          );
+        }
+
+        // Precompute which field each column maps to.
+        // (Some CSV exports have "merged" headers → family columns are split into primary + secondary header rows.)
+        const fieldKeyByCol: Array<keyof MilitiaFormData | string | undefined> = [];
+        const numCols = headerColsPrimary.length;
+
+        for (let i = 0; i < numCols; i++) {
+          const primary = headerColsPrimary[i] ?? "";
+          const secondary = headerColsSecondary[i] ?? "";
+
+          const primaryNorm = normalizeHeader(primary);
+          const secondaryNorm = normalizeHeader(secondary);
+
+          // 1) Direct mapping from primary header (case-insensitive)
+          const direct = HEADER_MAP_NORMALIZED[primaryNorm];
+          if (direct) {
+            fieldKeyByCol[i] = direct;
+            continue;
+          }
+
+          // 2) Family split across primary + secondary header rows
+          const primaryIsCha = primaryNorm === "cha";
+          const primaryIsMe = primaryNorm === "mẹ";
+          const prevPrimaryNorm =
+            i > 0 ? normalizeHeader(headerColsPrimary[i - 1] ?? "") : "";
+
+          if (isTenToken(secondaryNorm)) {
+            if (primaryIsCha) fieldKeyByCol[i] = "cha_ten";
+            else if (primaryIsMe) fieldKeyByCol[i] = "me_ten";
+            else if (prevPrimaryNorm === "cha") fieldKeyByCol[i] = "cha_ten";
+            else if (prevPrimaryNorm === "mẹ") fieldKeyByCol[i] = "me_ten";
+            else fieldKeyByCol[i] = undefined;
+            continue;
+          }
+
+          if (isSdtToken(secondaryNorm)) {
+            if (primaryIsCha) fieldKeyByCol[i] = "cha_sdt";
+            else if (primaryIsMe) fieldKeyByCol[i] = "me_sdt";
+            else if (prevPrimaryNorm === "cha") fieldKeyByCol[i] = "cha_sdt";
+            else if (prevPrimaryNorm === "mẹ") fieldKeyByCol[i] = "me_sdt";
+            else fieldKeyByCol[i] = undefined;
+            continue;
+          }
+
+          fieldKeyByCol[i] = undefined;
         }
 
         const errors: string[] = [];
         const data: MilitiaFormData[] = [];
 
-        // Read data rows starting after header
-        for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
+        // Determine where actual data starts.
+        // If the row after header contains sub-header tokens (like "Tên", "SDT") but no real data,
+        // skip it as it's a secondary header row.
+        let dataStartRow = headerRowIndex + 1;
+        const firstDataRowCells: string[] = [];
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: dataStartRow, c })];
+          firstDataRowCells.push(cell ? String(cell.v).trim() : "");
+        }
+        const firstRowJoined = firstDataRowCells.join(" ").toLowerCase();
+        const looksLikeSubHeader =
+          (isTenToken(firstRowJoined) || isSdtToken(firstRowJoined)) &&
+          !firstDataRowCells.some((v) => /^\d{9,12}$/.test(v)); // no CCCD-like number
+        if (looksLikeSubHeader) {
+          dataStartRow = headerRowIndex + 2;
+        }
+
+        // Read data rows starting after header (and secondary header if present)
+        for (let r = dataStartRow; r <= range.e.r; r++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mapped: Record<string, any> = {};
           let hasAnyValue = false;
@@ -160,10 +260,26 @@ export async function parseExcelFile(
           for (let c = range.s.c; c <= range.e.c; c++) {
             const cell = ws[XLSX.utils.encode_cell({ r, c })];
             const rawVal = cell ? cell.v : "";
-            const header = headerCols[c - range.s.c] ?? "";
-            const fieldKey = HEADER_MAP[header];
+            const fieldKey = fieldKeyByCol[c - range.s.c];
             if (fieldKey && rawVal !== "" && rawVal != null) {
-              mapped[fieldKey] = typeof rawVal === "string" ? rawVal.trim() : rawVal;
+              const isNumericField =
+                fieldKey === "tieuDoi" ||
+                fieldKey === "namVaoLucLuong";
+
+              // Prefer formatted value to preserve leading zeros (e.g. CCCD/SDT exported as number).
+              const cellText =
+                cell && typeof cell.w === "string" && cell.w.trim() !== ""
+                  ? cell.w
+                  : undefined;
+
+              const value =
+                !isNumericField && cellText != null
+                  ? cellText.trim()
+                  : typeof rawVal === "string"
+                    ? rawVal.trim()
+                    : rawVal;
+
+              mapped[fieldKey] = value;
               hasAnyValue = true;
             }
           }
@@ -186,7 +302,6 @@ export async function parseExcelFile(
           const record: MilitiaFormData = {
             hoTen: String(mapped.hoTen),
             cccd: String(mapped.cccd),
-            stt: mapped.stt ? Number(mapped.stt) : undefined,
             sdt: mapped.sdt ? String(mapped.sdt) : "",
             diaChi: mapped.diaChi ? String(mapped.diaChi) : "",
             trinhDoVanHoa: mapped.trinhDoVanHoa
@@ -220,7 +335,12 @@ export async function parseExcelFile(
     };
 
     reader.onerror = () => reject(new Error("Lỗi đọc file"));
-    reader.readAsArrayBuffer(file);
+
+    if (isCSV) {
+      reader.readAsText(file, "UTF-8");
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
   });
 }
 
