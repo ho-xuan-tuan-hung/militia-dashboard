@@ -13,14 +13,18 @@ const HEADER_MAP: Record<string, keyof MilitiaFormData | string> = {
   cccd: "cccd",
   "Căn cước": "cccd",
   "Số CCCD": "cccd",
+  "CCCD/CMT": "cccd",
   SĐT: "sdt",
+  SDT: "sdt",
   sdt: "sdt",
   "Số điện thoại": "sdt",
   "Điện thoại": "sdt",
   "Địa chỉ": "diaChi",
   diaChi: "diaChi",
   "Trình độ văn hóa": "trinhDoVanHoa",
+  "Trình độ văn hoá": "trinhDoVanHoa",
   "Trình độ VH": "trinhDoVanHoa",
+  "Trình độ": "trinhDoVanHoa",
   trinhDoVanHoa: "trinhDoVanHoa",
   "Tiểu đội": "tieuDoi",
   tieuDoi: "tieuDoi",
@@ -30,11 +34,19 @@ const HEADER_MAP: Record<string, keyof MilitiaFormData | string> = {
   "Năm vào LL": "namVaoLucLuong",
   namVaoLucLuong: "namVaoLucLuong",
   "Họ tên cha": "cha_ten",
+  "Tên cha": "cha_ten",
+  "Cha": "cha_ten",
   "SĐT cha": "cha_sdt",
+  "SDT cha": "cha_sdt",
   "Họ tên mẹ": "me_ten",
+  "Tên mẹ": "me_ten",
+  "Mẹ": "me_ten",
   "SĐT mẹ": "me_sdt",
+  "SDT mẹ": "me_sdt",
   "Ghi chú": "ghiChu",
   ghiChu: "ghiChu",
+  "Ngày sinh": "__ngaySinh",
+  "Năm sinh": "__namSinh",
 };
 
 // ─── EXPORT: MilitiaFormData[] → Excel download ───────────────────
@@ -84,6 +96,29 @@ export function exportToExcel(data: MilitiaFormData[], filename?: string) {
   XLSX.writeFile(wb, exportName);
 }
 
+// Known header keywords used to detect the header row
+const HEADER_KEYWORDS = ["họ tên", "ho ten", "hoten", "cccd", "căn cước"];
+
+/**
+ * Find the header row index by scanning for known keywords.
+ * Returns 0-based row index, defaults to 0 if not found.
+ */
+function findHeaderRow(ws: XLSX.WorkSheet): number {
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+  for (let r = range.s.r; r <= Math.min(range.e.r, 10); r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === "string") {
+        const lower = cell.v.trim().toLowerCase();
+        if (HEADER_KEYWORDS.some((kw) => lower.includes(kw))) {
+          return r;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 // ─── IMPORT: File → MilitiaFormData[] ─────────────────────────────
 export async function parseExcelFile(
   file: File
@@ -103,38 +138,51 @@ export async function parseExcelFile(
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, {
-          defval: "",
-        });
+        // Auto-detect header row
+        const headerRowIndex = findHeaderRow(ws);
+        const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+        const headerCols: string[] = [];
+
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
+          headerCols.push(cell ? String(cell.v).trim() : `__col${c}`);
+        }
 
         const errors: string[] = [];
         const data: MilitiaFormData[] = [];
 
-        rawRows.forEach((raw, rowIndex) => {
-          // Map headers to known fields
+        // Read data rows starting after header
+        for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mapped: Record<string, any> = {};
+          let hasAnyValue = false;
 
-          for (const [header, value] of Object.entries(raw)) {
-            const trimmed = header.trim();
-            const fieldKey = HEADER_MAP[trimmed];
-            if (fieldKey) {
-              mapped[fieldKey] = typeof value === "string" ? value.trim() : value;
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const cell = ws[XLSX.utils.encode_cell({ r, c })];
+            const rawVal = cell ? cell.v : "";
+            const header = headerCols[c - range.s.c] ?? "";
+            const fieldKey = HEADER_MAP[header];
+            if (fieldKey && rawVal !== "" && rawVal != null) {
+              mapped[fieldKey] = typeof rawVal === "string" ? rawVal.trim() : rawVal;
+              hasAnyValue = true;
             }
           }
 
+          // Skip completely empty rows
+          if (!hasAnyValue) continue;
+
+          const rowNum = r + 1; // 1-based for user display
+
           // Validate required fields
           if (!mapped.hoTen) {
-            errors.push(`Dòng ${rowIndex + 2}: Thiếu "Họ tên"`);
-            return;
+            errors.push(`Dòng ${rowNum}: Thiếu "Họ tên"`);
+            continue;
           }
           if (!mapped.cccd) {
-            errors.push(`Dòng ${rowIndex + 2}: Thiếu "CCCD"`);
-            return;
+            errors.push(`Dòng ${rowNum}: Thiếu "CCCD"`);
+            continue;
           }
 
-          // Build the record
           const record: MilitiaFormData = {
             hoTen: String(mapped.hoTen),
             cccd: String(mapped.cccd),
@@ -163,7 +211,7 @@ export async function parseExcelFile(
           };
 
           data.push(record);
-        });
+        }
 
         resolve({ data, errors });
       } catch {
