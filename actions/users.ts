@@ -71,10 +71,10 @@ export async function createUser(data: {
       };
     }
 
-    if (data.role === "tieu_doi_truong" && !data.tieuDoi) {
+    if ((data.role === "tieu_doi_truong" || data.role === "dan_quan") && !data.tieuDoi) {
       return {
         success: false,
-        message: "Tiểu đội trưởng phải được gán tiểu đội",
+        message: "Vai trò này phải được gán tiểu đội",
       };
     }
 
@@ -84,7 +84,7 @@ export async function createUser(data: {
       passwordHash,
       hoTen: data.hoTen,
       role: data.role,
-      tieuDoi: data.role === "tieu_doi_truong" ? data.tieuDoi : undefined,
+      tieuDoi: data.role !== "admin" ? data.tieuDoi : undefined,
       active: true,
     });
 
@@ -120,8 +120,7 @@ export async function updateUser(
     if (data.hoTen) updateData.hoTen = data.hoTen;
     if (data.role) {
       updateData.role = data.role;
-      updateData.tieuDoi =
-        data.role === "tieu_doi_truong" ? data.tieuDoi : undefined;
+      updateData.tieuDoi = data.role !== "admin" ? data.tieuDoi : undefined;
     }
     if (data.active !== undefined) updateData.active = data.active;
     if (data.newPassword) {
@@ -184,7 +183,7 @@ export async function resetUserPassword(
   newPassword: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const session = await requireAdmin();
+    await requireAdmin();
 
     if (!newPassword || newPassword.length < 6) {
       return { success: false, message: "Mật khẩu phải có ít nhất 6 ký tự" };

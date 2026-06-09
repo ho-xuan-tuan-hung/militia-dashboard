@@ -24,12 +24,24 @@ import {
   Users,
   Lock,
   User as UserIcon,
+  IdCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const BASE_NAV = [
+const ADMIN_NAV = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/diem-danh", label: "Điểm danh", icon: ClipboardList },
+  { href: "/quan-ly-nguoi-dung", label: "Người dùng", icon: Users },
+];
+
+const TIEU_DOI_TRUONG_NAV = [
+  { href: "/", label: "Tổng quan", icon: LayoutDashboard },
+  { href: "/diem-danh", label: "Điểm danh", icon: ClipboardList },
+];
+
+const DAN_QUAN_NAV = [
+  { href: "/ho-so", label: "Hồ sơ", icon: IdCard },
+  { href: "/diem-danh", label: "Nhiệm vụ", icon: ClipboardList },
 ];
 
 export function DashboardHeader() {
@@ -37,11 +49,14 @@ export function DashboardHeader() {
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const isAdmin = session?.user?.role === "admin";
+  const role = session?.user?.role;
 
-  const navItems = isAdmin
-    ? [...BASE_NAV, { href: "/quan-ly-nguoi-dung", label: "Người dùng", icon: Users }]
-    : BASE_NAV;
+  const navItems =
+    role === "admin"
+      ? ADMIN_NAV
+      : role === "dan_quan"
+        ? DAN_QUAN_NAV
+        : TIEU_DOI_TRUONG_NAV;
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/90 backdrop-blur-md">

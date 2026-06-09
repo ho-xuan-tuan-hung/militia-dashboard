@@ -67,7 +67,7 @@ export interface PickerMilitia {
 
 // ─── Users / RBAC ─────────────────────────────────────────────────
 
-export type UserRole = "admin" | "tieu_doi_truong";
+export type UserRole = "admin" | "tieu_doi_truong" | "dan_quan";
 
 export interface AppUser {
   _id?: string;
@@ -75,6 +75,7 @@ export interface AppUser {
   hoTen: string;
   role: UserRole;
   tieuDoi?: number;
+  militiaId?: string;
   active: boolean;
   createdAt?: string;
   updatedAt?: string;

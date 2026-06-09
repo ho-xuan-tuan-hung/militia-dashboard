@@ -33,7 +33,7 @@ interface FormState {
   username: string;
   password: string;
   hoTen: string;
-  role: "admin" | "tieu_doi_truong";
+  role: "admin" | "tieu_doi_truong" | "dan_quan";
   tieuDoi: string;
   active: boolean;
 }
@@ -42,7 +42,7 @@ const defaultForm: FormState = {
   username: "",
   password: "",
   hoTen: "",
-  role: "tieu_doi_truong",
+  role: "dan_quan",
   tieuDoi: "",
   active: true,
 };
@@ -95,7 +95,7 @@ export function UserFormDialog({
     if (!isEdit && !form.password) errs.password = "Mật khẩu là bắt buộc";
     if (form.password && form.password.length < 6)
       errs.password = "Mật khẩu phải có ít nhất 6 ký tự";
-    if (form.role === "tieu_doi_truong" && !form.tieuDoi)
+    if ((form.role === "tieu_doi_truong" || form.role === "dan_quan") && !form.tieuDoi)
       errs.tieuDoi = "Phải chọn tiểu đội";
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -197,11 +197,12 @@ export function UserFormDialog({
               <SelectContent>
                 <SelectItem value="admin">Quản trị viên</SelectItem>
                 <SelectItem value="tieu_doi_truong">Tiểu đội trưởng</SelectItem>
+                <SelectItem value="dan_quan">Dân quân</SelectItem>
               </SelectContent>
             </Select>
           </FormField>
 
-          {form.role === "tieu_doi_truong" && (
+          {(form.role === "tieu_doi_truong" || form.role === "dan_quan") && (
             <FormField label="Tiểu đội" required error={errors.tieuDoi}>
               <Select
                 value={form.tieuDoi}

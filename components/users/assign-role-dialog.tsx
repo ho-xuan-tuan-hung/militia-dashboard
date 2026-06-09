@@ -35,8 +35,8 @@ export function AssignRoleDialog({
   user,
   onSuccess,
 }: AssignRoleDialogProps) {
-  const [role, setRole] = useState<"admin" | "tieu_doi_truong">(
-    user?.role || "tieu_doi_truong"
+  const [role, setRole] = useState<"admin" | "tieu_doi_truong" | "dan_quan">(
+    user?.role || "dan_quan"
   );
   const [tieuDoi, setTieuDoi] = useState<string>(
     user?.tieuDoi?.toString() || ""
@@ -99,14 +99,13 @@ export function AssignRoleDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Quản trị viên (Toàn quyền)</SelectItem>
-                <SelectItem value="tieu_doi_truong">
-                  Tiểu đội trưởng (Xem tiểu đội)
-                </SelectItem>
+                <SelectItem value="tieu_doi_truong">Tiểu đội trưởng (Quản lý tiểu đội)</SelectItem>
+                <SelectItem value="dan_quan">Dân quân (Xem hồ sơ + điểm danh)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {role === "tieu_doi_truong" && (
+          {(role === "tieu_doi_truong" || role === "dan_quan") && (
             <div className="space-y-2">
               <Label htmlFor="tieu-doi">Tiểu đội</Label>
               <Select

@@ -2,7 +2,7 @@ import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { connectDB } from "@/lib/mongodb";
 import { verifyPassword } from "@/lib/password";
-import User from "@/models/User";
+import User, { type UserRole } from "@/models/User";
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET environment variable is not set");
@@ -34,8 +34,9 @@ export const authOptions: AuthOptions = {
           id: string;
           name: string;
           email: string;
-          role: "admin" | "tieu_doi_truong";
+          role: UserRole;
           tieuDoi?: number;
+          militiaId?: string;
         } | null = null;
 
         if (dbUser) {
@@ -50,6 +51,7 @@ export const authOptions: AuthOptions = {
               email: dbUser.username,
               role: dbUser.role,
               tieuDoi: dbUser.tieuDoi,
+              militiaId: dbUser.militiaId?.toString(),
             };
           }
         } else {
@@ -67,7 +69,7 @@ export const authOptions: AuthOptions = {
               id: "env-admin",
               name: "Admin",
               email: adminUsername,
-              role: "admin",
+              role: "admin" as UserRole,
             };
           }
         }
@@ -85,8 +87,10 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as typeof user & { role: "admin" | "tieu_doi_truong" }).role;
-        token.tieuDoi = (user as typeof user & { tieuDoi?: number }).tieuDoi;
+        const u = user as typeof user & { role: UserRole; tieuDoi?: number; militiaId?: string };
+        token.role = u.role;
+        token.tieuDoi = u.tieuDoi;
+        token.militiaId = u.militiaId;
         token.userId = user.id;
       }
       return token;
@@ -95,6 +99,7 @@ export const authOptions: AuthOptions = {
       if (session.user) {
         session.user.role = token.role;
         session.user.tieuDoi = token.tieuDoi;
+        session.user.militiaId = token.militiaId;
         session.user.id = token.userId;
       }
       return session;
