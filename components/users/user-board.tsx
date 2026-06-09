@@ -119,10 +119,15 @@ export function UserBoard() {
                   <ShieldCheck className="h-3 w-3" />
                   Quản trị viên
                 </Badge>
-              ) : (
+              ) : user.role === "tieu_doi_truong" ? (
                 <Badge className="bg-orange-500/10 text-orange-600 border-orange-500/30 gap-1">
                   <User className="h-3 w-3" />
                   Tiểu đội trưởng
+                </Badge>
+              ) : (
+                <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/30 gap-1">
+                  <User className="h-3 w-3" />
+                  Dân quân
                 </Badge>
               )}
               {user.tieuDoi != null && (
