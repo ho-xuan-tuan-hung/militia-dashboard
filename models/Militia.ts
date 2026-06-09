@@ -62,6 +62,9 @@ const MilitiaSchema = new Schema<IMilitiaDocument>(
   }
 );
 
+MilitiaSchema.index({ tieuDoi: 1, chucVu: 1, hoTen: 1 });
+MilitiaSchema.index({ namVaoLucLuong: 1 });
+
 // Prevent model recompilation in development
 const Militia: Model<IMilitiaDocument> =
   mongoose.models.Militia ||

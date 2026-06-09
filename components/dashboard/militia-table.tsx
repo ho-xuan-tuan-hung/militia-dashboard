@@ -15,6 +15,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -49,13 +55,19 @@ import {
   deleteMilitia,
   getAllMilitiaForExport,
   getAvailableYears,
+  getAvailableTieuDoi,
 } from "@/actions/militia";
 import { MilitiaFormDialog } from "./militia-form-dialog";
 import { ImportDialog } from "./import-dialog";
 import { exportToExcel } from "@/lib/excel";
 import type { MilitiaFormData } from "@/types";
+import { cn } from "@/lib/utils";
 
-export function MilitiaTable() {
+interface MilitiaTableProps {
+  onStatsChange?: () => void;
+}
+
+export function MilitiaTable({ onStatsChange }: MilitiaTableProps) {
   const [data, setData] = useState<MilitiaFormData[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -65,6 +77,7 @@ export function MilitiaTable() {
   const [tieuDoiFilter, setTieuDoiFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [availableTieuDoi, setAvailableTieuDoi] = useState<number[]>([]);
   const [loading, startTransition] = useTransition();
   const [initialLoad, setInitialLoad] = useState(true);
 
@@ -73,6 +86,12 @@ export function MilitiaTable() {
   const [editData, setEditData] = useState<MilitiaFormData | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<MilitiaFormData | null>(
+    null
+  );
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchData = useCallback(() => {
     startTransition(async () => {
@@ -95,9 +114,15 @@ export function MilitiaTable() {
   }, [fetchData]);
 
   useEffect(() => {
-    getAvailableYears()
-      .then((years) => setAvailableYears(years))
-      .catch(() => setAvailableYears([]));
+    Promise.all([getAvailableYears(), getAvailableTieuDoi()])
+      .then(([years, squads]) => {
+        setAvailableYears(years);
+        setAvailableTieuDoi(squads);
+      })
+      .catch(() => {
+        setAvailableYears([]);
+        setAvailableTieuDoi([]);
+      });
   }, []);
 
   // Debounced search
@@ -120,17 +145,16 @@ export function MilitiaTable() {
     setDialogOpen(true);
   }
 
-  async function handleDelete(row: MilitiaFormData) {
-    if (!row._id) return;
-    const confirmed = window.confirm(
-      `Xác nhận xóa "${row.hoTen}" khỏi danh sách?`
-    );
-    if (!confirmed) return;
-
-    const result = await deleteMilitia(row._id);
+  async function confirmDelete() {
+    if (!deleteTarget?._id) return;
+    setDeleteLoading(true);
+    const result = await deleteMilitia(deleteTarget._id);
+    setDeleteLoading(false);
+    setDeleteTarget(null);
     if (result.success) {
       toast.success(result.message);
       fetchData();
+      onStatsChange?.();
     } else {
       toast.error(result.message);
     }
@@ -225,9 +249,7 @@ export function MilitiaTable() {
       size: 50,
       cell: ({ row }) => (
         <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground"
-          >
+          <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground">
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -237,7 +259,7 @@ export function MilitiaTable() {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onClick={() => handleDelete(row.original)}
+              onClick={() => setDeleteTarget(row.original)}
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Xóa
@@ -262,12 +284,12 @@ export function MilitiaTable() {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 items-center gap-3">
-          <div className="relative max-w-sm flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:max-w-xs sm:w-auto">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Tìm theo họ tên, CCCD..."
-              className="pl-9"
+              className="pl-9 w-full"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -279,7 +301,7 @@ export function MilitiaTable() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[170px]">
               <SelectValue placeholder="Chức vụ" />
             </SelectTrigger>
             <SelectContent>
@@ -297,19 +319,18 @@ export function MilitiaTable() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Tiểu đội" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả TĐ</SelectItem>
-              {[1, 2, 3].map((n) => (
+              {availableTieuDoi.map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   Tiểu đội {n}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
           <Select
             value={yearFilter}
             onValueChange={(v) => {
@@ -317,7 +338,7 @@ export function MilitiaTable() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="w-[170px]">
+            <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Năm vào lực lượng" />
             </SelectTrigger>
             <SelectContent>
@@ -356,8 +377,13 @@ export function MilitiaTable() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border">
+      {/* Table — dimmed while a non-initial transition runs */}
+      <div
+        className={cn(
+          "relative rounded-lg border transition-opacity duration-150",
+          loading && !initialLoad && "opacity-60 pointer-events-none"
+        )}
+      >
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
@@ -445,19 +471,60 @@ export function MilitiaTable() {
         </div>
       </div>
 
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xác nhận xóa</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Bạn có chắc muốn xóa{" "}
+            <span className="font-semibold text-foreground">
+              {deleteTarget?.hoTen}
+            </span>{" "}
+            khỏi danh sách? Hành động này không thể hoàn tác.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleteLoading}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? "Đang xóa..." : "Xóa"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Form Dialog */}
       <MilitiaFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editData={editData}
-        onSuccess={fetchData}
+        onSuccess={() => {
+          fetchData();
+          onStatsChange?.();
+        }}
       />
 
       {/* Import Dialog */}
       <ImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
-        onSuccess={fetchData}
+        onSuccess={() => {
+          fetchData();
+          onStatsChange?.();
+        }}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -45,6 +46,12 @@ const emptyForm: MilitiaFormData = {
   ghiChu: "",
 };
 
+const CCCD_REGEX = /^\d{12}$/;
+const SDT_REGEX = /^0[0-9]{9}$/;
+const CURRENT_YEAR = new Date().getFullYear();
+
+type FormErrors = Partial<Record<keyof MilitiaFormData, string>>;
+
 export function MilitiaFormDialog({
   open,
   onOpenChange,
@@ -52,36 +59,47 @@ export function MilitiaFormDialog({
   onSuccess,
 }: MilitiaFormDialogProps) {
   const [form, setForm] = useState<MilitiaFormData>(emptyForm);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const isEdit = !!editData?._id;
 
+  // Reset/populate form whenever the dialog opens or editData changes.
+  // No setTimeout — sync state update is correct here.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (editData) {
-        setForm({
-          ...emptyForm,
-          ...editData,
-          thongTinNguoiThan: {
-            cha: {
-              ten: editData.thongTinNguoiThan?.cha?.ten ?? "",
-              sdt: editData.thongTinNguoiThan?.cha?.sdt ?? "",
-            },
-            me: {
-              ten: editData.thongTinNguoiThan?.me?.ten ?? "",
-              sdt: editData.thongTinNguoiThan?.me?.sdt ?? "",
-            },
+    if (!open) return;
+    setErrors({});
+    if (editData) {
+      setForm({
+        ...emptyForm,
+        ...editData,
+        thongTinNguoiThan: {
+          cha: {
+            ten: editData.thongTinNguoiThan?.cha?.ten ?? "",
+            sdt: editData.thongTinNguoiThan?.cha?.sdt ?? "",
           },
-        });
-      } else {
-        setForm(emptyForm);
-      }
-    }, 0);
+          me: {
+            ten: editData.thongTinNguoiThan?.me?.ten ?? "",
+            sdt: editData.thongTinNguoiThan?.me?.sdt ?? "",
+          },
+        },
+      });
+    } else {
+      setForm(emptyForm);
+    }
+  }, [open, editData]);
 
-    return () => clearTimeout(timer);
-  }, [editData, open]);
+  function clearError(field: keyof MilitiaFormData) {
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  }
 
-  function updateField(field: string, value: string | number | null | undefined) {
+  function updateField(
+    field: keyof MilitiaFormData,
+    value: string | number | null | undefined
+  ) {
     setForm((prev) => ({ ...prev, [field]: value ?? undefined }));
+    clearError(field);
   }
 
   function updateNguoiThan(
@@ -101,8 +119,32 @@ export function MilitiaFormDialog({
     }));
   }
 
+  function validate(): boolean {
+    const newErrors: FormErrors = {};
+
+    if (!CCCD_REGEX.test(form.cccd)) {
+      newErrors.cccd = "CCCD phải có đúng 12 chữ số";
+    }
+
+    if (form.sdt && !SDT_REGEX.test(form.sdt)) {
+      newErrors.sdt = "SĐT không hợp lệ (10 chữ số, bắt đầu bằng 0)";
+    }
+
+    if (
+      form.namVaoLucLuong !== undefined &&
+      (form.namVaoLucLuong < 1945 || form.namVaoLucLuong > CURRENT_YEAR)
+    ) {
+      newErrors.namVaoLucLuong = `Năm vào phải từ 1945 đến ${CURRENT_YEAR}`;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!validate()) return;
+
     setLoading(true);
 
     const result = isEdit
@@ -130,7 +172,7 @@ export function MilitiaFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Row 1: Họ tên */}
+          {/* Họ tên */}
           <div className="space-y-2">
             <Label htmlFor="hoTen">
               Họ tên <span className="text-destructive">*</span>
@@ -143,7 +185,7 @@ export function MilitiaFormDialog({
             />
           </div>
 
-          {/* Row 2: CCCD + SĐT */}
+          {/* CCCD + SĐT */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="cccd">
@@ -152,9 +194,13 @@ export function MilitiaFormDialog({
               <Input
                 id="cccd"
                 required
+                maxLength={12}
                 value={form.cccd}
                 onChange={(e) => updateField("cccd", e.target.value)}
               />
+              {errors.cccd && (
+                <p className="text-xs text-destructive">{errors.cccd}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="sdt">Số điện thoại</Label>
@@ -163,10 +209,13 @@ export function MilitiaFormDialog({
                 value={form.sdt ?? ""}
                 onChange={(e) => updateField("sdt", e.target.value)}
               />
+              {errors.sdt && (
+                <p className="text-xs text-destructive">{errors.sdt}</p>
+              )}
             </div>
           </div>
 
-          {/* Row 3: Địa chỉ */}
+          {/* Địa chỉ */}
           <div className="space-y-2">
             <Label htmlFor="diaChi">Địa chỉ</Label>
             <Input
@@ -176,7 +225,7 @@ export function MilitiaFormDialog({
             />
           </div>
 
-          {/* Row 4: Trình độ + Tiểu đội */}
+          {/* Trình độ + Tiểu đội */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="trinhDoVanHoa">Trình độ văn hóa</Label>
@@ -192,6 +241,7 @@ export function MilitiaFormDialog({
               <Input
                 id="tieuDoi"
                 type="number"
+                min={1}
                 value={form.tieuDoi ?? ""}
                 onChange={(e) =>
                   updateField(
@@ -203,7 +253,7 @@ export function MilitiaFormDialog({
             </div>
           </div>
 
-          {/* Row 5: Chức vụ + Năm vào */}
+          {/* Chức vụ + Năm vào */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Chức vụ</Label>
@@ -229,6 +279,8 @@ export function MilitiaFormDialog({
               <Input
                 id="namVaoLucLuong"
                 type="number"
+                min={1945}
+                max={CURRENT_YEAR}
                 value={form.namVaoLucLuong ?? ""}
                 onChange={(e) =>
                   updateField(
@@ -237,12 +289,16 @@ export function MilitiaFormDialog({
                   )
                 }
               />
+              {errors.namVaoLucLuong && (
+                <p className="text-xs text-destructive">
+                  {errors.namVaoLucLuong}
+                </p>
+              )}
             </div>
           </div>
 
           <Separator />
 
-          {/* Thông tin người thân */}
           <p className="text-sm font-medium text-muted-foreground">
             Thông tin người thân
           </p>
@@ -283,17 +339,17 @@ export function MilitiaFormDialog({
 
           <Separator />
 
-          {/* Ghi chú */}
+          {/* Ghi chú — textarea for multi-line notes */}
           <div className="space-y-2">
             <Label htmlFor="ghiChu">Ghi chú</Label>
-            <Input
+            <Textarea
               id="ghiChu"
+              rows={3}
               value={form.ghiChu ?? ""}
               onChange={(e) => updateField("ghiChu", e.target.value)}
             />
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
@@ -303,11 +359,7 @@ export function MilitiaFormDialog({
               Hủy
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading
-                ? "Đang lưu..."
-                : isEdit
-                  ? "Cập nhật"
-                  : "Thêm mới"}
+              {loading ? "Đang lưu..." : isEdit ? "Cập nhật" : "Thêm mới"}
             </Button>
           </div>
         </form>

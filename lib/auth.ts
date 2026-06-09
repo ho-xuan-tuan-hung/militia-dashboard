@@ -1,5 +1,12 @@
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { connectDB } from "@/lib/mongodb";
+import { verifyPassword } from "@/lib/password";
+import User from "@/models/User";
+
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET environment variable is not set");
+}
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -10,27 +17,92 @@ export const authOptions: AuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const adminUsername = process.env.ADMIN_USERNAME;
-        const adminPassword = process.env.ADMIN_PASSWORD;
+        if (!credentials?.username || !credentials?.password) return null;
 
-        if (
-          credentials?.username === adminUsername &&
-          credentials?.password === adminPassword
-        ) {
-          return {
-            id: "1",
-            name: "Admin",
-            email: "admin@militia.local",
-          };
+        const start = Date.now();
+
+        await connectDB();
+
+        // Try MongoDB user first
+        const dbUser = await User.findOne({
+          username: credentials.username.toLowerCase().trim(),
+          active: true,
+        }).lean();
+
+        let isValid = false;
+        let authUser: {
+          id: string;
+          name: string;
+          email: string;
+          role: "admin" | "tieu_doi_truong";
+          tieuDoi?: number;
+        } | null = null;
+
+        if (dbUser) {
+          isValid = await verifyPassword(
+            credentials.password,
+            dbUser.passwordHash
+          );
+          if (isValid) {
+            authUser = {
+              id: dbUser._id.toString(),
+              name: dbUser.hoTen,
+              email: dbUser.username,
+              role: dbUser.role,
+              tieuDoi: dbUser.tieuDoi,
+            };
+          }
+        } else {
+          // Fallback: env-var admin for initial setup / migration
+          const adminUsername = process.env.ADMIN_USERNAME;
+          const adminPassword = process.env.ADMIN_PASSWORD;
+          if (
+            adminUsername &&
+            adminPassword &&
+            credentials.username === adminUsername &&
+            credentials.password === adminPassword
+          ) {
+            isValid = true;
+            authUser = {
+              id: "env-admin",
+              name: "Admin",
+              email: adminUsername,
+              role: "admin",
+            };
+          }
         }
 
-        return null;
+        // Always take at least 500ms to deter brute-force timing attacks
+        const elapsed = Date.now() - start;
+        if (elapsed < 500) {
+          await new Promise((r) => setTimeout(r, 500 - elapsed));
+        }
+
+        return isValid ? authUser : null;
       },
     }),
   ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = (user as typeof user & { role: "admin" | "tieu_doi_truong" }).role;
+        token.tieuDoi = (user as typeof user & { tieuDoi?: number }).tieuDoi;
+        token.userId = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.role = token.role;
+        session.user.tieuDoi = token.tieuDoi;
+        session.user.id = token.userId;
+      }
+      return session;
+    },
+  },
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 24 * 60 * 60,
   },
   pages: {
     signIn: "/login",

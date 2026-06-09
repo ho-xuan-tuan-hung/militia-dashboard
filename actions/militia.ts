@@ -9,6 +9,8 @@ import type {
   TrinhDoStats,
 } from "@/types";
 import { revalidatePath } from "next/cache";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 function serialize<T>(doc: T): T {
   return JSON.parse(JSON.stringify(doc));
@@ -30,7 +32,9 @@ export async function getMilitiaList(params?: {
 }> {
   await connectDB();
 
-  const {
+  const session = await getServerSession(authOptions);
+
+  let {
     search = "",
     chucVu = "",
     tieuDoi = "",
@@ -38,6 +42,14 @@ export async function getMilitiaList(params?: {
     page = 1,
     pageSize = 20,
   } = params ?? {};
+
+  // Squad leaders can only see their own squad
+  if (
+    session?.user?.role === "tieu_doi_truong" &&
+    session.user.tieuDoi != null
+  ) {
+    tieuDoi = String(session.user.tieuDoi);
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {};
@@ -236,6 +248,35 @@ export async function bulkUpsertMilitia(
   }
 }
 
+// ─── MILITIA PICKER (for task assignment) ─────────────────────────
+export async function getMilitiaForPicker(): Promise<{
+  _id: string;
+  hoTen: string;
+  tieuDoi?: number;
+  chucVu?: string;
+}[]> {
+  await connectDB();
+  const session = await getServerSession(authOptions);
+
+  const filter: Record<string, unknown> =
+    session?.user?.role === "tieu_doi_truong" && session.user.tieuDoi != null
+      ? { tieuDoi: session.user.tieuDoi }
+      : {};
+
+  const data = await Militia.aggregate([
+    { $match: filter },
+    {
+      $addFields: {
+        _chucVuOrder: { $cond: [{ $eq: ["$chucVu", "Tiểu đội trưởng"] }, 0, 1] },
+      },
+    },
+    { $sort: { tieuDoi: 1, _chucVuOrder: 1, hoTen: 1 } },
+    { $project: { hoTen: 1, tieuDoi: 1, chucVu: 1 } },
+  ]);
+
+  return serialize(data) as unknown as { _id: string; hoTen: string; tieuDoi?: number; chucVu?: string }[];
+}
+
 // ─── FILTER HELPERS ───────────────────────────────────────────────
 export async function getAvailableYears(): Promise<number[]> {
   await connectDB();
@@ -248,17 +289,35 @@ export async function getAvailableYears(): Promise<number[]> {
   return numericYears;
 }
 
+export async function getAvailableTieuDoi(): Promise<number[]> {
+  await connectDB();
+
+  const values = await Militia.distinct("tieuDoi");
+  return values
+    .filter((v) => typeof v === "number" && Number.isFinite(v))
+    .sort((a, b) => a - b) as number[];
+}
+
 // ─── DASHBOARD STATS ──────────────────────────────────────────────
 export async function getDashboardStats(): Promise<DashboardStats> {
   await connectDB();
 
+  const session = await getServerSession(authOptions);
   const currentYear = new Date().getFullYear();
 
+  // Squad leader: stats scoped to their squad only
+  const squadFilter =
+    session?.user?.role === "tieu_doi_truong" && session.user.tieuDoi != null
+      ? { tieuDoi: session.user.tieuDoi }
+      : {};
+
   const [totalMilitia, totalLeaders, newRecruits, squads] = await Promise.all([
-    Militia.countDocuments(),
-    Militia.countDocuments({ chucVu: "Tiểu đội trưởng" }),
-    Militia.countDocuments({ namVaoLucLuong: currentYear }),
-    Militia.distinct("tieuDoi"),
+    Militia.countDocuments(squadFilter),
+    Militia.countDocuments({ ...squadFilter, chucVu: "Tiểu đội trưởng" }),
+    Militia.countDocuments({ ...squadFilter, namVaoLucLuong: currentYear }),
+    session?.user?.role === "tieu_doi_truong"
+      ? Promise.resolve([session.user.tieuDoi])
+      : Militia.distinct("tieuDoi"),
   ]);
 
   return {

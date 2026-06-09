@@ -2,54 +2,58 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Shield, UserPlus, Star } from "lucide-react";
+import { ClipboardList, Calendar, TrendingUp, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DashboardStats } from "@/types";
+import type { AttendanceStat } from "@/types";
 
-interface StatsCardsProps {
-  stats: DashboardStats | null;
+interface AttendanceStatsProps {
+  stat: AttendanceStat | null;
 }
 
 const cards = [
   {
-    key: "totalMilitia" as const,
-    label: "Tổng quân số",
-    icon: Users,
+    key: "totalTasks" as const,
+    label: "Tổng nhiệm vụ",
+    icon: ClipboardList,
+    iconColor: "text-primary",
+    iconBg: "bg-primary/10",
+    gradient: "from-primary/5 to-transparent",
+    border: "border-primary/20",
+    format: (v: number) => String(v),
+  },
+  {
+    key: "tasksThisMonth" as const,
+    label: "Nhiệm vụ tháng này",
+    icon: Calendar,
     iconColor: "text-blue-600 dark:text-blue-400",
     iconBg: "bg-blue-500/10",
     gradient: "from-blue-500/5 to-transparent",
     border: "border-blue-500/20",
+    format: (v: number) => String(v),
   },
   {
-    key: "totalSquads" as const,
-    label: "Số tiểu đội",
-    icon: Shield,
+    key: "avgAttendanceRate" as const,
+    label: "Tỷ lệ chuyên cần",
+    icon: TrendingUp,
     iconColor: "text-emerald-600 dark:text-emerald-400",
     iconBg: "bg-emerald-500/10",
     gradient: "from-emerald-500/5 to-transparent",
     border: "border-emerald-500/20",
+    format: (v: number) => `${v}%`,
   },
   {
-    key: "newRecruits" as const,
-    label: "Tân binh năm nay",
-    icon: UserPlus,
+    key: "totalRecords" as const,
+    label: "Tổng lượt điểm danh",
+    icon: Users,
     iconColor: "text-amber-600 dark:text-amber-400",
     iconBg: "bg-amber-500/10",
     gradient: "from-amber-500/5 to-transparent",
     border: "border-amber-500/20",
-  },
-  {
-    key: "totalLeaders" as const,
-    label: "Tiểu đội trưởng",
-    icon: Star,
-    iconColor: "text-purple-600 dark:text-purple-400",
-    iconBg: "bg-purple-500/10",
-    gradient: "from-purple-500/5 to-transparent",
-    border: "border-purple-500/20",
+    format: (v: number) => String(v),
   },
 ];
 
-export function StatsCards({ stats }: StatsCardsProps) {
+export function AttendanceStats({ stat }: AttendanceStatsProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {cards.map((card) => (
@@ -70,9 +74,9 @@ export function StatsCards({ stats }: StatsCardsProps) {
             </div>
           </CardHeader>
           <CardContent>
-            {stats ? (
+            {stat ? (
               <p className="text-3xl font-bold tracking-tight">
-                {stats[card.key]}
+                {card.format(stat[card.key])}
               </p>
             ) : (
               <Skeleton className="h-9 w-20" />
