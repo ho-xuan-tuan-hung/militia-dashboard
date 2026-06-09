@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ShieldCheck, User, Plus, MoreHorizontal, Pencil, Trash2, KeyRound } from "lucide-react";
+import { ShieldCheck, User, Plus, MoreHorizontal, Pencil, Trash2, KeyRound, Lock, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/molecules/confirm-dialog";
 import { UserFormDialog } from "./user-form-dialog";
+import { ResetPasswordDialog } from "./reset-password-dialog";
+import { AssignRoleDialog } from "./assign-role-dialog";
 import { getUsers, deleteUser } from "@/actions/users";
 import { toast } from "sonner";
 import type { AppUser } from "@/types";
@@ -40,6 +42,8 @@ export function UserBoard() {
   const [editTarget, setEditTarget] = useState<AppUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<AppUser | null>(null);
+  const [assignRoleTarget, setAssignRoleTarget] = useState<AppUser | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -167,6 +171,20 @@ export function UserBoard() {
                     Chỉnh sửa
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setResetPasswordTarget(user)}
+                  >
+                    <Lock className="mr-2 h-4 w-4" />
+                    Đặt lại mật khẩu
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => setAssignRoleTarget(user)}
+                  >
+                    <Shield className="mr-2 h-4 w-4" />
+                    Phân quyền
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     className="cursor-pointer text-destructive focus:text-destructive"
                     onClick={() => setDeleteTarget(user)}
                   >
@@ -217,6 +235,20 @@ export function UserBoard() {
         variant="destructive"
         loading={deleteLoading}
         onConfirm={handleDelete}
+      />
+
+      <ResetPasswordDialog
+        open={!!resetPasswordTarget}
+        onOpenChange={(open) => !open && setResetPasswordTarget(null)}
+        user={resetPasswordTarget}
+        onSuccess={loadUsers}
+      />
+
+      <AssignRoleDialog
+        open={!!assignRoleTarget}
+        onOpenChange={(open) => !open && setAssignRoleTarget(null)}
+        user={assignRoleTarget}
+        onSuccess={loadUsers}
       />
     </>
   );

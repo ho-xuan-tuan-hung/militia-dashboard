@@ -1,10 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChangePasswordDialog } from "@/components/users/change-password-dialog";
 import {
   Shield,
   LogOut,
@@ -13,6 +22,8 @@ import {
   ClipboardList,
   LayoutDashboard,
   Users,
+  Lock,
+  User as UserIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +36,7 @@ export function DashboardHeader() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const isAdmin = session?.user?.role === "admin";
 
   const navItems = isAdmin
@@ -71,11 +83,6 @@ export function DashboardHeader() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
-          {session?.user?.name && (
-            <span className="hidden md:block text-xs text-muted-foreground mr-2">
-              {session.user.name}
-            </span>
-          )}
           <Button
             variant="ghost"
             size="icon"
@@ -86,17 +93,53 @@ export function DashboardHeader() {
             <Sun className="h-4 w-4 scale-100 transition-transform dark:scale-0" />
             <Moon className="absolute h-4 w-4 scale-0 transition-transform dark:scale-100" />
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Đăng xuất</span>
-          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <UserIcon className="h-4 w-4" />
+                <span className="hidden sm:inline text-xs">
+                  {session?.user?.name}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {session?.user?.name && (
+                <>
+                  <div className="px-2 py-1.5 text-sm font-medium">
+                    {session.user.name}
+                  </div>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setChangePasswordOpen(true)}
+              >
+                <Lock className="mr-2 h-4 w-4" />
+                Đổi mật khẩu
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Đăng xuất
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+      />
     </header>
   );
 }

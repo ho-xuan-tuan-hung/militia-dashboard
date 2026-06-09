@@ -178,3 +178,78 @@ export async function deleteUser(
     };
   }
 }
+
+export async function resetUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const session = await requireAdmin();
+
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, message: "Mật khẩu phải có ít nhất 6 ký tự" };
+    }
+
+    await connectDB();
+    const passwordHash = await hashPassword(newPassword);
+
+    const doc = await User.findByIdAndUpdate(
+      userId,
+      { passwordHash },
+      { new: true }
+    );
+
+    if (!doc) return { success: false, message: "Không tìm thấy tài khoản" };
+
+    revalidatePath("/quan-ly-nguoi-dung");
+    return {
+      success: true,
+      message: `Đặt lại mật khẩu cho "${doc.hoTen}" thành công`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Lỗi khi đặt lại mật khẩu",
+    };
+  }
+}
+
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return { success: false, message: "Vui lòng đăng nhập" };
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, message: "Mật khẩu phải có ít nhất 6 ký tự" };
+    }
+
+    await connectDB();
+
+    // Find user
+    const user = await User.findById(session.user.id);
+    if (!user) return { success: false, message: "Không tìm thấy tài khoản" };
+
+    // Verify current password
+    const { verifyPassword } = await import("@/lib/password");
+    const isValid = await verifyPassword(currentPassword, user.passwordHash);
+    if (!isValid) {
+      return { success: false, message: "Mật khẩu hiện tại không chính xác" };
+    }
+
+    // Update password
+    const passwordHash = await hashPassword(newPassword);
+    await User.findByIdAndUpdate(session.user.id, { passwordHash });
+
+    return { success: true, message: "Đổi mật khẩu thành công" };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Lỗi khi đổi mật khẩu",
+    };
+  }
+}
